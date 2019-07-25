@@ -30,8 +30,6 @@ from DeepCombDTI.utils import get_args, get_params, run_validation, run_predicti
     Using TensorFlow backend.
     
 
-# Prediction
-
 ```python
 def predict(dti_num, test_dti):
     # get parameters from arguments
@@ -54,7 +52,6 @@ def predict(dti_num, test_dti):
 
     # construct DTI prediction model
     dti_prediction_model = Drug_Target_Prediction(**model_params)
-#     print(dti_prediction_model.summary())
 
     # run prediction
     run_prediction(dti_prediction_model, train_params, output_file, train_dic, test_dic)
