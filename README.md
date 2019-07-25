@@ -2,15 +2,16 @@
 DeepCombDTI is a model for drug-target interaction prediction using deep learning and various molecular fingerprints.
 
 ## Overview
-![DeepCombDTI](images/deepcombdti_overview.png){: width="80%" height="80%"}
+
+<img src="images/deepcombdti_overview.png" alt="DeepCombDTI" width="80%" height="80%"/>
 
 ## Dataset
 
-![Dataset](images/dataset.png){: width="60%" height="60%"}
+<img src="images/dataset.png" alt="Dataset" width="60%" height="60%"/>
 
 ### Molecular fingerprints
 
-![Molecular fingerprints](images/molecular_fingerprints.png){: width="60%" height="60%"}
+<img src="images/molecular_fingerprints.png" alt="Molecular fingerprints" width="60%" height="60%"/>
 
 ## Prediction
 
