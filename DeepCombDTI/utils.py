@@ -15,10 +15,12 @@ from sklearn.metrics import precision_recall_curve, auc, roc_curve
 
 # import other modules
 import os
+import random
 
 # parse data
-def parse_data(dti_dir, drug_dir, protein_dir, drug_vecs, drug_lens, prot_vec, prot_len):
-    print('Parsing {0}, {1}'.format(*[dti_dir ,drug_dir]))
+def parse_data(dti_dir, drug_dir, protein_dir, drug_vecs, drug_lens, prot_vec, prot_len, parsing=True):
+    if not parsing: return {"features": [], "label": []}
+    print('Parsing {0}, {1}'.format(*[dti_dir, drug_dir]))
 
     # set column names
     drug_col = "Compound_ID"
@@ -30,23 +32,26 @@ def parse_data(dti_dir, drug_dir, protein_dir, drug_vecs, drug_lens, prot_vec, p
     drug_df = pd.read_csv(drug_dir, index_col="Compound_ID")
     protein_df = pd.read_csv(protein_dir, index_col="Protein_ID")
 
-    # Extract drug features
-    drug_features = []
+
+    features = []
     for drug_vec in drug_vecs:
+        # Extract drug features
         drug_dic = drug_df[drug_vec].map(lambda fp: fp.split("\t")).to_dict()
         drug_feature = np.array(list(dti_df[drug_col].map(lambda drug: drug_dic[drug])), dtype=np.float64)
-        drug_features.append(drug_feature)
 
-    # Extract protein features
-    prot_dic= protein_df[prot_vec].map(lambda seq: [float(i) for i in seq.split("\t")]).to_dict()
-    protein_feature = np.array(list(dti_df[protein_col].map(lambda protein: prot_dic[protein])), dtype=np.float64)
+        # Extract protein features
+        prot_dic= protein_df[prot_vec].map(lambda seq: [float(i) for i in seq.split("\t")]).to_dict()
+        protein_feature = np.array(list(dti_df[protein_col].map(lambda protein: prot_dic[protein])), dtype=np.float64)
+
+        features.append(drug_feature)
+        features.append(protein_feature)
     
     # Extract labels
     label =  dti_df[label_col].values
 
     print("\tPositive data : %d" %(sum(dti_df[label_col])))
     print("\tNegative data : %d" %(dti_df.shape[0] - sum(dti_df[label_col])))
-    return {"drug_features": drug_features, "protein_feature": protein_feature, "label": label}
+    return {"features": features, "label": label}
 
 def get_args():
     import argparse
@@ -66,14 +71,14 @@ def get_args():
         scikit-learn\n
         ============================\n
         \n
-        contact : dlsrnsladlek@gist.ac.kr\n
-        """
-    )
+        contact : hyunwook.kim.89@gmail.com\n
+    """)
     
     # train_params
     parser.add_argument("dti_dir", help="Training DTI information [drug, target, label]")
     parser.add_argument("drug_dir", help="Training drug information [drug, SMILES,[feature_name, ..]]")
     parser.add_argument("protein_dir", help="Training protein information [protein, seq, [feature_name]]")
+    parser.add_argument("--parsing-train", "-pt", help="Whether parse training data or not", default=True, type=bool)
     
     # test_params
     parser.add_argument("--test-name", '-n', help="Name of test data sets", nargs="*")
@@ -85,17 +90,15 @@ def get_args():
     # structure_params (drug)
     parser.add_argument("--drug-vecs", "-V", help="Types of drug feature", nargs="*", type=str, default="")
     parser.add_argument("--drug-lens", "-L", help="Drug vector lengths", default=None, nargs="*", type=int)
-    parser.add_argument("--drug-layers-list", '-c', help="Dense layers for drugs", default=None, type=str)
-    parser.add_argument("--drug-layer-methods", "-M", help="Methods for drug layers", default=None, nargs="*", type=str)
-    parser.add_argument("--fc-drug-layers","-fd", help="Dense layers for concatenated drug layers", default=None, nargs="*", type=int)
+    parser.add_argument("--drug-layers-list", '-c', help="Dense layers for drugs", default=None, nargs="*", type=str)
     
     # structure_params (protein)
     parser.add_argument("--prot-vec", "-v", help="Type of protein feature", type=str, default="")
     parser.add_argument("--prot-len", "-l", help="Protein vector length", default=2500, type=int)
-    parser.add_argument("--protein-layers","-p", help="Dense layers for protein", default=None, nargs="*", type=int)
+    parser.add_argument("--protein-layers-list","-p", help="Dense layers for protein", default=None, nargs="*", type=str)
     
     # structure_params (fully connected)
-    parser.add_argument("--fc-layers", '-f', help="Dense layers for concatenated layers of drug and target layer", default=None, nargs="*", type=int)
+    parser.add_argument("--fc-layers-list", '-f', help="Dense layers for concatenated layers of drug and target layer", default=None, nargs="*", type=str)
     
     # training_params
     parser.add_argument("--learning-rate", '-r', help="Learning late for training", default=1e-4, type=float)
@@ -110,15 +113,10 @@ def get_args():
     # mode_params
     parser.add_argument("--validation", help="Excute validation with independent data, will give AUC and AUPR (No prediction result)", action="store_true")
     parser.add_argument("--predict", help="Predict interactions of independent test set", action="store_true")
-    parser.add_argument("--has-previous-model", "-hpm", help="Use previous trained models", action="store_true")
     
     # output_params
-    parser.add_argument("--save-model", "-m", help="save model", type=str)
-    parser.add_argument("--output", "-o", help="Prediction output", type=str)
-    
-    # gpu_num_param
-    parser.add_argument("--gpus", "-G", help="Select the number of activated GPUs", default=1, type=int)
-    parser.add_argument("--gpu-num", "-g", help="Select GPU number", default="0", type=str)
+    parser.add_argument("--model-output", "-m", help="Model output", default=None, type=str)
+    parser.add_argument("--output", "-o", help="Prediction output", default=None, type=str)
     
     return parser.parse_args()
 
@@ -136,6 +134,7 @@ def get_params(args):
         "dti_dir": args.dti_dir,
         "drug_dir": args.drug_dir,
         "protein_dir": args.protein_dir,
+        "parsing": args.parsing_train,
     }
     
     # training parameter
@@ -154,18 +153,14 @@ def get_params(args):
     
     # model parameter
     model_params = {
-        'drug_layers_list': args.drug_layers_list.split(','),
-        'drug_layer_methods': args.drug_layer_methods,
-        'fc_drug_layers': args.fc_drug_layers,
-        'protein_layers': args.protein_layers,
-        'fc_layers': args.fc_layers,
+        'drug_layers_list': [list(map(int, drug_layers.split(','))) for drug_layers in args.drug_layers_list],
+        'protein_layers_list': [list(map(int, protein_layers.split(','))) for protein_layers in args.protein_layers_list],
+        'fc_layers_list': [list(map(int, fc_layers.split(','))) for fc_layers in args.fc_layers_list],
         'learning_rate': args.learning_rate,
         'decay': args.decay,
         'activation': args.activation,
         'dropout': args.dropout,
-        'gpus': args.gpus,
-        'gpu_num': args.gpu_num,
-        'has_previous_model': args.has_previous_model
+        'model_output': args.model_output
     }
     model_params.update(type_params)
     
@@ -186,13 +181,7 @@ def get_params(args):
         for test_name, test_dti, test_drug, test_protein in test_sets
     }
     
-    
     return train_dic, test_dic, train_params, type_params, model_params, output_file
-
-def select_gpu_num(gpu_num):
-    os.environ["CUDA_DEVICE_ORDER"] = "PCI_BUS_ID"
-    os.environ["CUDA_VISIBLE_DEVICES"] = gpu_num
-    print('GPU:', gpu_num, 'is used.')
 
 def run_validation(dti_prediction_model, train_params, output_file, train_dic, test_dic):
     print('Validation')
@@ -205,8 +194,8 @@ def run_validation(dti_prediction_model, train_params, output_file, train_dic, t
     validation_params.update(train_dic)
     validation_params.update(test_dic)
     
-    # validate the model
     dti_prediction_model.validation(**validation_params)
+    print('Validation is completed.\n')
 
 def run_prediction(dti_prediction_model, train_params, output_file, train_dic, test_dic):
     print('Prediction')
@@ -222,7 +211,6 @@ def run_prediction(dti_prediction_model, train_params, output_file, train_dic, t
     for dataset in test_predicted:
         # extract prediction results
         value = np.squeeze(test_predicted[dataset]['predicted'])
-        print(dataset+str(value.shape))
         
         # save prediction results as dataframe
         temp_df = pd.DataFrame()
@@ -232,7 +220,10 @@ def run_prediction(dti_prediction_model, train_params, output_file, train_dic, t
         result_columns.append((dataset, 'predicted'))
         result_columns.append((dataset, 'label'))
         
+    print('Prediction is completed.\n')
+
     # save prediction results to a csv file
-    print('save to %s' % output_file)
-    result_df.columns = pd.MultiIndex.from_tuples(result_columns)
-    result_df.to_csv(output_file, index=False)
+    if output_file:
+        print('save to %s' % output_file)
+        result_df.columns = pd.MultiIndex.from_tuples(result_columns)
+        result_df.to_csv(output_file, index=False)

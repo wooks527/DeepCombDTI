@@ -10,7 +10,7 @@ if __name__ == '__main__':
 
     # construct DTI prediction model
     dti_prediction_model = Drug_Target_Prediction(**model_params)
-    print(dti_prediction_model.summary())
+    # print(dti_prediction_model.summary())
 
     # run validation or prediction
     if args.validation:
@@ -20,5 +20,5 @@ if __name__ == '__main__':
 
     # save trained model
     if args.save_model:
-        dti_prediction_model.save(args.save_model)
+        dti_prediction_model.save()
     exit()

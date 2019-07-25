@@ -6,6 +6,7 @@ data/
 model/
 results/
 snakefiles/
+ppt/
 
 *.pyc
 *.ipynb
